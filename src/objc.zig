@@ -43,11 +43,7 @@ pub fn sendMessage(
     };
 }
 
-fn MsgSendFn(
-    comptime TargetType: type,
-    comptime ArgsType: type,
-    comptime ReturnType: type,
-) type {
+fn MsgSendFn(comptime TargetType: type, comptime ArgsType: type, comptime ReturnType: type) type {
     const args_type_struct = @typeInfo(ArgsType).@"struct";
 
     if (!args_type_struct.is_tuple) {
