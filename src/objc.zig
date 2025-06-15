@@ -18,17 +18,16 @@ pub fn sendMessage(
 ) ReturnType {
     const TargetType = @TypeOf(target);
 
-    switch (@typeInfo(TargetType)) {
-        .optional => @compileError("target cannot be optional"),
-        else => {},
+    if (@typeInfo(TargetType) != .pointer or @sizeOf(TargetType) != @sizeOf(c.id)) {
+        @compileError("target must be a pointer to an instance of a class");
     }
 
-    const RealReturnType = switch (@typeInfo(ReturnType)) {
+    const UnwrappedReturnType = switch (@typeInfo(ReturnType)) {
         .optional => |optional| optional.child,
         else => ReturnType,
     };
 
-    const msg_send_fn: *const MsgSendFn(TargetType, @TypeOf(args), RealReturnType) =
+    const msg_send_fn: *const MsgSendFn(TargetType, @TypeOf(args), UnwrappedReturnType) =
         @ptrCast(&c.objc_msgSend);
 
     const return_value = @call(
