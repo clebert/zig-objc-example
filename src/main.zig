@@ -1,7 +1,11 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
+const AutoreleasePool = @import("AutoreleasePool.zig");
+const Embedding = @import("embedding.zig");
+const Language = @import("language.zig").Language;
 const objc = @import("objc.zig");
+const String = @import("String.zig");
 
 pub fn main() !void {
     var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
@@ -18,62 +22,28 @@ pub fn main() !void {
 
     defer if (is_debug and debug_allocator.deinit() == .leak) unreachable;
 
-    const pool = objc.sendMessage(
-        objc.sendMessage(try objc.getClass("NSAutoreleasePool"), "alloc", .{}, objc.Id),
-        "init",
-        .{},
-        objc.Id,
-    );
+    var autorelease_pool = try AutoreleasePool.init();
 
-    defer objc.sendMessage(pool, "drain", .{}, void);
+    defer autorelease_pool.deinit();
 
-    const input = "Hello, World!";
+    var input_string = try String.init("Hello, World!");
 
-    std.debug.print("input: {s}\n", .{input});
+    defer input_string.deinit();
 
-    const input_string = objc.sendMessage(
-        try objc.getClass("NSString"),
-        "stringWithUTF8String:",
-        .{input},
-        objc.Id,
-    );
+    std.debug.print("input: {s}\n", .{input_string.getUtf8String()});
 
-    const dominant_language_string = objc.sendMessage(
-        try objc.getClass("NLLanguageRecognizer"),
-        "dominantLanguageForString:",
-        .{input_string},
-        objc.Id,
-    );
+    const language = try Language.recognize(input_string) orelse return error.UnrecognizedLanguage;
 
-    const dominant_language = objc.sendMessage(
-        dominant_language_string,
-        "UTF8String",
-        .{},
-        [*:0]const u8,
-    );
+    std.debug.print("language: {}\n", .{language});
 
-    std.debug.print("dominant_language: {s}\n", .{dominant_language});
+    var embedding = try Embedding.init(language);
 
-    const sentence_embedding = objc.sendMessage(
-        try objc.getClass("NLEmbedding"),
-        "sentenceEmbeddingForLanguage:revision:",
-        .{ dominant_language_string, @as(u64, 1) },
-        ?objc.Id,
-    ) orelse return error.EmbeddingNotFound;
+    defer embedding.deinit();
 
-    const dimension = objc.sendMessage(sentence_embedding, "dimension", .{}, u64);
-
-    std.debug.print("dimension: {d}\n", .{dimension});
-
-    const vector = try allocator.alloc(f32, dimension);
+    const vector = try embedding.getVector(allocator, input_string);
 
     defer allocator.free(vector);
 
-    if (!objc.sendMessage(sentence_embedding, "getVector:forString:", .{
-        vector.ptr,
-        input_string,
-    }, bool)) return error.FailedToGetVector;
-
     std.debug.print("vector[0]: {d}\n", .{vector[0]});
-    std.debug.print("vector[{d}]: {d}\n", .{ dimension - 1, vector[dimension - 1] });
+    std.debug.print("vector[{d}]: {d}\n", .{ vector.len - 1, vector[vector.len - 1] });
 }
