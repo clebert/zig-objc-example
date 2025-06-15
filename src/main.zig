@@ -36,7 +36,7 @@ pub fn main() !void {
 
     std.debug.print("language: {}\n", .{language});
 
-    var embedding = try Embedding.init(language);
+    var embedding = try Embedding.init(language) orelse return error.NoEmbedding;
 
     defer embedding.deinit();
 

@@ -8,13 +8,13 @@ const Self = @This();
 
 instance: objc.Id,
 
-pub fn init(language: Language) !Self {
+pub fn init(language: Language) !?Self {
     const instance = objc.sendMessage(
         try objc.getClass("NLEmbedding"),
         "sentenceEmbeddingForLanguage:revision:",
         .{ language.getInstance(), @as(u64, 1) },
         ?objc.Id,
-    ) orelse return error.EmbeddingNotFound;
+    ) orelse return null;
 
     objc.sendMessage(instance, "retain", .{}, void);
 
@@ -35,7 +35,7 @@ pub fn getVector(self: Self, allocator: std.mem.Allocator, input_string: String)
     if (!objc.sendMessage(self.instance, "getVector:forString:", .{
         vector.ptr,
         input_string.instance,
-    }, bool)) return error.FailedToGetVector;
+    }, bool)) return error.FailedToCopyVector;
 
     return vector;
 }
