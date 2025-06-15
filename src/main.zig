@@ -1,8 +1,23 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 const objc = @import("objc.zig");
 
 pub fn main() !void {
+    var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+
+    // https://github.com/ziglang/zig/pull/22808
+    const allocator, const is_debug = allocator: {
+        if (builtin.os.tag == .wasi) break :allocator .{ std.heap.wasm_allocator, false };
+
+        break :allocator switch (builtin.mode) {
+            .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
+            .ReleaseFast, .ReleaseSmall => .{ std.heap.smp_allocator, false },
+        };
+    };
+
+    defer if (is_debug and debug_allocator.deinit() == .leak) unreachable;
+
     const pool = objc.sendMessage(
         objc.sendMessage(try objc.getClass("NSAutoreleasePool"), "alloc", .{}, objc.Id),
         "init",
@@ -50,14 +65,15 @@ pub fn main() !void {
 
     std.debug.print("dimension: {d}\n", .{dimension});
 
-    const vector = objc.sendMessage(
-        sentence_embedding,
-        "vectorForString:",
-        .{input_string},
-        ?objc.Id,
-    ) orelse return error.VectorNotFound;
+    const vector = try allocator.alloc(f32, dimension);
 
-    const vector_size = objc.sendMessage(vector, "count", .{}, u64);
+    defer allocator.free(vector);
 
-    std.debug.print("vector_size: {d}\n", .{vector_size});
+    if (!objc.sendMessage(sentence_embedding, "getVector:forString:", .{
+        vector.ptr,
+        input_string,
+    }, bool)) return error.FailedToGetVector;
+
+    std.debug.print("vector[0]: {d}\n", .{vector[0]});
+    std.debug.print("vector[{d}]: {d}\n", .{ dimension - 1, vector[dimension - 1] });
 }
